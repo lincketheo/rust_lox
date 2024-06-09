@@ -1,42 +1,45 @@
-
 use std::env;
-use std::process::ExitCode;
 use std::fs;
 use std::io;
+use std::process::ExitCode;
 
 mod models;
 mod lexer;
 
 use models::CompilationFailure;
 
+/// Usage:
+/// $ ./lox <filename> # compiles <filename>
+/// $ ./lox # Enters into a REPL for lox
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
 
     if args.len() > 2 {
         ExitCode::FAILURE
     } else if args.len() == 1 {
-        run_prompt()
+        run_prompt() // REPL
     } else {
-        run_file(&args[1])
+        run_file(&args[1]) // Compile file
     }
 }
 
-fn run_file(file_name : &String) -> ExitCode {
-    match fs::read_to_string(file_name) {
-        Result::Ok(data) => { 
-            match run_string(&data) {
-                Ok(_) => {
-                    ExitCode::SUCCESS
-                },
-                Err(errs) => {
-                    errs.iter().for_each(|x| x.print_error());
-                    ExitCode::FAILURE
-                }
-            }
-        },
-        Result::Err(error) => {
-            eprintln!("Failed to open file {}. Reason: {error}", file_name);
-            ExitCode::FAILURE 
+/// Compiles a file. Returns success or failure
+///
+/// * `file_name`: The file to compile
+fn run_file(file_name: &String) -> ExitCode {
+    let data = match fs::read_to_string(file_name) {
+        Ok(data) => data,
+        Err(msg) => {
+            eprintln!("Failed to read file: {}. Error: {:?}\n", file_name, msg);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match run_string(&data) {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(errs) => {
+            errs.iter().for_each(|x| x.print_error());
+            ExitCode::FAILURE
         }
     }
 }
@@ -44,30 +47,39 @@ fn run_file(file_name : &String) -> ExitCode {
 fn run_prompt() -> ExitCode {
     loop {
         print!(">> ");
-        io::Write::flush(&mut io::stdout()).expect("Failed to flush stdout");
-
         let mut input = String::new();
 
-        let _ = match io::stdin().read_line(&mut input) {
-            Ok(_) => {
-                if input.trim() == "exit" {
-                    return ExitCode::SUCCESS;
-                } else {
-                    run_string(&input) 
+        // Flush the input
+        if let Err(e) = io::Write::flush(&mut io::stdout()) {
+            eprintln!("Failed to flush. Error: {:?}\n", e);
+            return ExitCode::FAILURE;
+        }
+
+        // Read input line
+        if let Err(e) = io::stdin().read_line(&mut input) {
+            eprintln!("Failed to flush. Error: {:?}\n", e);
+            return ExitCode::FAILURE;
+        }
+
+        // Exit REPL
+        if input.trim() == "exit" {
+            println!("Goodbye!");
+            return ExitCode::SUCCESS;
+        }
+
+        // Execute command
+        match run_string(&input) {
+            Ok(_) => {}
+            Err(errs) => {
+                for err in errs.into_iter() {
+                    err.print_error();
                 }
-            },
-            Err(error) => {
-                eprintln!("Error reading line: {error}");
-                return ExitCode::FAILURE;
             }
         };
-    };
+    }
 }
 
 fn run_string(data: &String) -> Result<(), Vec<CompilationFailure>> {
     dbg!(data);
     Ok(())
 }
-
-
-
